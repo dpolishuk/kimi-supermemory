@@ -237,4 +237,4 @@ MIT
 
 ---
 
-Made with ❤️ by the Supermemory team
+Made with ❤️ by dpolishuk! ;-P
