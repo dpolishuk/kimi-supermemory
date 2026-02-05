@@ -7,8 +7,13 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { SupermemoryClient } from './lib/supermemory-client.js';
 import { formatContext } from './lib/format-context.js';
+import { loadConfig as configLoader } from './services/config.js';
+import { logInfo, logError, setDebugMode } from './services/logger.js';
 
-const API_KEY = process.env.SUPERMEMORY_API_KEY;
+const config = configLoader();
+setDebugMode(config.debug);
+
+logInfo('Kimi Supermemory MCP server starting');
 
 async function getContainerTag(cwd) {
   // Create a stable container tag from the working directory
@@ -119,7 +124,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
-  if (!API_KEY) {
+  if (!config.apiKey) {
+    logError('SUPERMEMORY_API_KEY not set');
     return {
       content: [
         {
@@ -132,7 +138,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   try {
-    const client = new SupermemoryClient(API_KEY, args.containerTag);
+    const client = new SupermemoryClient(config.apiKey, config.apiUrl, args.containerTag);
 
     switch (name) {
       case 'supermemory_search': {
@@ -258,12 +264,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function main() {
+  logInfo('MCP server connecting to stdio transport');
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error('Kimi Supermemory MCP server running on stdio');
+  logInfo('MCP server ready and connected');
 }
 
 main().catch((error) => {
+  logError('Fatal error during startup', String(error));
   console.error('Fatal error:', error);
   process.exit(1);
 });

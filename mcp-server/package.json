@@ -10,7 +10,8 @@
   "scripts": {
     "build": "esbuild src/server.js --bundle --platform=node --target=node18 --format=cjs --outfile=dist/server.cjs --minify",
     "dev": "node src/server.js",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "test": "mocha --require tsx/esm test/*.test.ts --exit"
   },
   "keywords": [
     "kimi-cli",
@@ -27,7 +28,13 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "esbuild": "^0.25.0"
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^25.2.0",
+    "esbuild": "^0.25.0",
+    "esbuild-register": "^3.6.0",
+    "mocha": "^11.7.5",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=18.0.0"
