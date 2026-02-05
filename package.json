@@ -1,0 +1,28 @@
+{
+  "name": "kimi-supermemory",
+  "version": "1.0.0",
+  "description": "Persistent memory for Kimi CLI using Supermemory",
+  "type": "module",
+  "scripts": {
+    "build": "cd mcp-server && npm run build",
+    "install:skill": "mkdir -p ~/.config/agents/skills/kimi-supermemory && cp skill/SKILL.md ~/.config/agents/skills/kimi-supermemory/",
+    "setup": "npm install && npm run build && npm run install:skill"
+  },
+  "keywords": [
+    "kimi-cli",
+    "supermemory",
+    "memory",
+    "ai",
+    "mcp",
+    "agent"
+  ],
+  "author": "Supermemory",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/supermemoryai/kimi-supermemory.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
