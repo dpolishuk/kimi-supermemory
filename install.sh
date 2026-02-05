@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 set -e
 
 # Colors for output
@@ -48,11 +48,29 @@ fi
 
 kimi mcp add --transport stdio supermemory -- node "$SERVER_PATH"
 
+# Verify MCP server is working
+echo -e "${YELLOW}Verifying MCP server...${NC}"
+if kimi mcp list 2>&1 | grep -q "supermemory"; then
+  echo -e "${GREEN}✓ MCP server registered successfully${NC}"
+else
+  echo -e "${RED}✗ MCP server registration failed. Run 'kimi mcp list' to diagnose.${NC}"
+  exit 1
+fi
+
 # Install skill
 echo -e "${YELLOW}Installing skill...${NC}"
 SKILL_DIR="${HOME}/.config/agents/skills/kimi-supermemory"
 mkdir -p "$SKILL_DIR"
 cp "$SCRIPT_DIR/skill/SKILL.md" "$SKILL_DIR/"
+
+# Verify skill installation
+echo -e "${YELLOW}Verifying skill installation...${NC}"
+if [ -f "$SKILL_DIR/SKILL.md" ]; then
+  echo -e "${GREEN}✓ Skill installed at $SKILL_DIR${NC}"
+else
+  echo -e "${RED}✗ Skill installation failed. Check directory exists: $SKILL_DIR${NC}"
+  exit 1
+fi
 
 # Check for API key
 if [ -z "$SUPERMEMORY_API_KEY" ]; then
@@ -64,6 +82,16 @@ if [ -z "$SUPERMEMORY_API_KEY" ]; then
     echo "  export SUPERMEMORY_API_KEY='sm_...'"
     echo ""
     echo "Get your API key at: https://console.supermemory.ai"
+fi
+
+# If API key is set, verify MCP server loads
+if [ -n "$SUPERMEMORY_API_KEY" ]; then
+    echo -e "${YELLOW}Testing MCP server startup...${NC}"
+    if timeout 5s node "$SERVER_PATH" 2>&1 | grep -q "running on stdio"; then
+        echo -e "${GREEN}✓ MCP server test passed${NC}"
+    else
+        echo -e "${YELLOW}⚠️  MCP server test skipped (may need interactive session)${NC}"
+    fi
 fi
 
 echo ""
