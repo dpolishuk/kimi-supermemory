@@ -29,7 +29,7 @@ Your Kimi CLI agent remembers what you worked on - across sessions, across proje
 ### One-Line Installation
 
 ```bash
-git clone https://github.com/supermemoryai/kimi-supermemory.git
+git clone https://github.com/dpolishuk/kimi-supermemory.git
 cd kimi-supermemory
 chmod +x install.sh
 ./install.sh
