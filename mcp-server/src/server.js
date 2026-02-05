@@ -9,6 +9,7 @@ import { SupermemoryClient } from './lib/supermemory-client.js';
 import { formatContext } from './lib/format-context.js';
 import { loadConfig as configLoader } from './services/config.js';
 import { logInfo, logError, setDebugMode } from './services/logger.js';
+import { stripPrivateContent, isFullyPrivate } from './services/privacy.js';
 
 const config = configLoader();
 setDebugMode(config.debug);
@@ -158,7 +159,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const formatted = result.results
-          .map((r, i) => `${i + 1}. ${r.memory.substring(0, 200)}${r.memory.length > 200 ? '...' : ''}`)
+          .map((r, i) => `${i + 1}. ${stripPrivateContent(r.memory).substring(0, 200)}${stripPrivateContent(r.memory).length > 200 ? '...' : ''}`)
           .join('\n\n');
 
         return {
@@ -172,8 +173,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'supermemory_add': {
+        const processedContent = stripPrivateContent(args.content);
         const result = await client.addMemory(
-          args.content,
+          processedContent,
           args.containerTag,
           args.metadata
         );
@@ -234,7 +236,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
 
         const formatted = result.memories
-          .map((m, i) => `${i + 1}. ${(m.content || m.memory || '').substring(0, 150)}...`)
+          .map((m, i) => `${i + 1}. ${stripPrivateContent(m.content || m.memory || '').substring(0, 150)}...`)
           .join('\n\n');
 
         return {
