@@ -118,6 +118,33 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: 'supermemory_forget',
+        description: 'Delete a specific memory by ID. Use to remove incorrect or outdated memories.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            memoryId: {
+              type: 'string',
+              description: 'ID of the memory to delete',
+            },
+          },
+          required: ['memoryId'],
+        },
+      },
+      {
+        name: 'supermemory_profile',
+        description: 'Get user profile facts and information learned from interactions.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'Optional query to filter profile facts',
+            },
+          },
+        },
+      },
     ],
   };
 });
@@ -244,6 +271,63 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: `Recent memories:\n\n${formatted}`,
+            },
+          ],
+        };
+      }
+
+      case 'supermemory_forget': {
+        await client.deleteMemory(args.memoryId);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Memory ${args.memoryId} deleted successfully.`,
+            },
+          ],
+        };
+      }
+
+      case 'supermemory_profile': {
+        const result = await client.getProfile(null, args.query);
+        
+        const staticFacts = result.profile?.static || [];
+        const dynamicFacts = result.profile?.dynamic || [];
+        
+        if (staticFacts.length === 0 && dynamicFacts.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No profile information available. Interactions will build your profile over time.',
+              },
+            ],
+          };
+        }
+
+        let profileText = '## Your Profile\n\n';
+        
+        if (staticFacts.length > 0) {
+          profileText += '### Facts About You\n';
+          staticFacts.forEach((fact, i) => {
+            profileText += `${i + 1}. ${fact}\n`;
+          });
+          profileText += '\n';
+        }
+        
+        if (dynamicFacts.length > 0) {
+          profileText += '### What You\'ve Told Us\n';
+          dynamicFacts.forEach((fact, i) => {
+            profileText += `${i + 1}. ${fact}\n`;
+          });
+          profileText += '\n';
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: profileText,
             },
           ],
         };
