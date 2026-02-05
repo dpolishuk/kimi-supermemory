@@ -55,6 +55,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: 'string',
               description: 'Optional: project-specific container tag to search within',
             },
+            types: {
+              type: 'string',
+              description: 'Optional: filter by memory types (project-config, architecture, error-solution, preference, learned-pattern, conversation)',
+            },
             limit: {
               type: 'number',
               description: 'Maximum number of results to return (default: 10)',
@@ -72,6 +76,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             content: {
               type: 'string',
               description: 'The memory content to save',
+            },
+            type: {
+              type: 'string',
+              description: 'Memory type (project-config, architecture, error-solution, preference, learned-pattern, conversation)',
+              enum: ['project-config', 'architecture', 'error-solution', 'preference', 'learned-pattern', 'conversation'],
             },
             containerTag: {
               type: 'string',
@@ -175,7 +184,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           limit: args.limit || 10,
         });
         
-        if (result.results.length === 0) {
+        // Filter by type if specified
+        let filteredResults = result.results;
+        if (args.types) {
+          const typeList = args.types.split(',').map(t => t.trim().toLowerCase());
+          filteredResults = filteredResults.filter(r => {
+            if (!r.metadata || !r.metadata.type) return false;
+            return typeList.includes(r.metadata.type.toLowerCase());
+          });
+        }
+        
+        if (filteredResults.length === 0) {
           return {
             content: [
               {
@@ -186,15 +205,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        const formatted = result.results
-          .map((r, i) => `${i + 1}. ${stripPrivateContent(r.memory).substring(0, 200)}${stripPrivateContent(r.memory).length > 200 ? '...' : ''}`)
+        const formatted = filteredResults
+          .map((r, i) => {
+            const typeName = r.metadata?.type ? ` [${r.metadata.type}]` : '';
+            const similarityScore = r.similarity ? ` (${Math.round(r.similarity * 100)}% similarity)` : '';
+            return `${i + 1}. ${stripPrivateContent(r.memory).substring(0, 200)}${stripPrivateContent(r.memory).length > 200 ? '...' : ''}${typeName}${similarityScore}`;
+          })
           .join('\n\n');
 
         return {
           content: [
             {
               type: 'text',
-              text: `Found ${result.total} memories:\n\n${formatted}`,
+              text: `Found ${result.total} memories${args.types ? ' (filtered by types)' : ''}:\n\n${formatted}`,
             },
           ],
         };
@@ -214,10 +237,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
         
         const processedContent = stripPrivateContent(args.content);
+        const metadataWithTimestamp = {
+          ...args.metadata,
+          ...(args.type && { type: args.type }),
+          timestamp: new Date().toISOString(),
+        };
+        
         const result = await client.addMemory(
           processedContent,
           args.containerTag,
-          args.metadata
+          metadataWithTimestamp
         );
         return {
           content: [
