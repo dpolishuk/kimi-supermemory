@@ -10,6 +10,7 @@ import { formatContext } from './lib/format-context.js';
 import { loadConfig as configLoader } from './services/config.js';
 import { logInfo, logError, setDebugMode } from './services/logger.js';
 import { stripPrivateContent, isFullyPrivate } from './services/privacy.js';
+import { getTags, getUserTag, getProjectTag } from './services/tags.js';
 
 const config = configLoader();
 setDebugMode(config.debug);
@@ -200,6 +201,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'supermemory_add': {
+        if (isFullyPrivate(args.content)) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: Cannot save memory. All content is marked as private using <private> tags. Memory must have non-private content to be saved.',
+              },
+            ],
+            isError: true,
+          };
+        }
+        
         const processedContent = stripPrivateContent(args.content);
         const result = await client.addMemory(
           processedContent,
@@ -217,14 +230,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'supermemory_get_context': {
-        const crypto = await import('crypto');
         const cwd = args.cwd || process.cwd();
-        const hash = crypto.createHash('md5').update(cwd).digest('hex').slice(0, 8);
-        const dirName = cwd.split('/').pop() || 'unknown';
-        const containerTag = `${dirName}_${hash}`;
-        const projectName = args.projectName || dirName;
+        const tags = getTags(cwd);
+        const projectName = args.projectName || cwd.split('/').pop() || 'unknown';
 
-        const profileResult = await client.getProfile(containerTag, projectName);
+        const profileResult = await client.getProfile(tags.project, projectName);
         const context = formatContext(profileResult, true, true, 5);
 
         if (!context) {
