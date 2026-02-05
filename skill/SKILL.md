@@ -1,6 +1,6 @@
 ---
 name: kimi-supermemory
-description: Persistent memory for Kimi CLI using Supermemory. Automatically recalls context at session start, captures conversation memories, and enables memory search across sessions.
+description: Persistent memory for Kimi CLI using Supermemory. Provides 6 tools: add, search, get_context, list, forget, profile. Features hash-based scoping, privacy filtering, and configurability.
 ---
 
 # Kimi Supermemory
@@ -9,97 +9,213 @@ This skill enables persistent memory across Kimi CLI sessions using [Supermemory
 
 ## Features
 
-- **Automatic Context Recall**: On session start, relevant memories are fetched and injected
-- **Memory Capture**: Important conversation turns are automatically saved
-- **Memory Search**: Search your coding history across all sessions
-- **Project-Aware**: Memories are organized by project/directory
+- **6 MCP Tools**: add, search, get_context, list, forget, profile
+- **Hash-Based Scoping**: User and project tags for organized memory
+- **Privacy Filtering**: `<private>` tags protect sensitive content
+- **Configuration**: JSONC config file with environment variable fallback
+- **Structured Logging**: Timestamped logs to ~/.kimi-supermemory.log
+- **Project-Aware**: Memories organized by project directory
 
-## Setup
+## Quick Start
 
-### 1. Install the MCP Server
+### Automatic Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/supermemoryai/kimi-supermemory.git
+# Run the install script
+chmod +x install.sh && ./install.sh
+```
+
+This script:
+- Builds the MCP server
+- Registers with kimi-cli: `kimi mcp add`
+- Installs SKILL.md to `~/.config/agents/skills/kimi-supermemory/`
+- Sets up basic configuration
+
+### Manual Installation
+
+```bash
+# Clone and setup
+git clone https://github.com/dpolishuk/kimi-supermemory.git
 cd kimi-supermemory/mcp-server
+npm install && npm run build
 
-# Install dependencies
-npm install
-
-# Build the server
-npm run build
-```
-
-### 2. Configure kimi-cli MCP
-
-Add the Supermemory MCP server to your kimi-cli configuration:
-
-```bash
+# Register with kimi-cli
 kimi mcp add --transport stdio supermemory -- node /path/to/kimi-supermemory/mcp-server/dist/server.cjs
-```
 
-### 3. Set API Key
-
-Get your API key at [console.supermemory.ai](https://console.supermemory.ai) and set it:
-
-```bash
+# Set API key
 export SUPERMEMORY_API_KEY="sm_..."
 ```
 
-Or add to your `~/.bashrc` or `~/.zshrc` for persistence.
+Get your API key at [console.supermemory.ai](https://console.supermemory.ai).
 
-## How It Works
+## Configuration
 
-### On Session Start
+### Configuration File
 
-When you start kimi-cli in a project directory, the skill automatically:
+Create `~/.config/kimi/supermemory.jsonc` or `~/.config/kimi/supermemory.json`:
 
-1. Fetches your user profile from Supermemory
-2. Retrieves recent context for this project
-3. Injects relevant memories into the conversation context
+```jsonc
+{
+  // API settings (environment variables take precedence)
+  "apiKey": "sm_...",
+  "apiUrl": "https://api.supermemory.ai",
 
-Example context that gets added:
+  // Debug mode (enables verbose logging to stderr)
+  "debug": false,
 
-```
-<supermemory-context>
-## User Profile
-- Prefers TypeScript over JavaScript
-- Uses Bun as package manager
+  // Keyword patterns for automatic memory capture
+  "keywordPatterns": ["decided:", "prefer:", "always:", "never:", "note: "],
 
-## Recent Context (this project)
-- Working on authentication flow
-- Implemented JWT middleware last session
-</supermemory-context>
-```
+  // Semantic search settings
+  "similarityThreshold": 0.6,
+  "maxResults": 10,
 
-### During Session
-
-When you ask about past work or previous sessions, the skill automatically searches your memories.
-
-### Memory Capture
-
-Important conversation turns (code edits, decisions, summaries) are automatically captured and stored for future sessions.
-
-## Manual Commands
-
-You can also interact with memories manually:
-
-### Search Memories
-
-```
-Search my memories for "authentication implementation"
+  // Memory limits
+  "memoryTypes": 6,
+  "compactSize": 50
+}
 ```
 
-### Add a Memory
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `SUPERMEMORY_API_KEY` | Your Supermemory API key | Yes |
+| `SUPERMEMORY_API_URL` | API endpoint (default: https://api.supermemory.ai) | No |
+| `KIMI_EMAIL` | Email for user tag generation (fallback to USER env var) | No |
+| `SUPERMEMORY_DEBUG` | Enable debug logging (true/false) | No |
+
+## Privacy
+
+### `<private>` Tags
+
+Wrap sensitive content in `<private>` tags to prevent storage:
 
 ```
-Save to supermemory: "We decided to use PostgreSQL over MongoDB for transaction support"
+<private>
+My API key is: sk-12345
+</private>
 ```
 
-### Index Codebase
+**Privacy Rules:**
+- Content inside `<private>` tags is replaced with `[REDACTED]`
+- Fully-private content (only `[REDACTED]` remains) is rejected
+- Case-insensitive: `<private>`, `<PRIVATE>`, `<PrIvAtE>` all work
+- Nested tags are handled correctly
 
+### Hash-Based Scoping
+
+Memories are organized using hash-based tags:
+
+**User Tag:**`kimi_user_{sha256(KIMI_EMAIL)}`- Unique identifier for your profile
+- Falls back to `USER` or `USERNAME` if `KIMI_EMAIL` not set
+
+**Project Tag:**`kimi_project_{sha256(normalized_git_url)}`- Stable across machines
+- Falls back to directory name if not a git repo
+
+Git URL normalization removes:- Protocols (https://, git@)
+- Credentials (user:pass@)
+- `.git` suffix
+
+## Memory Types
+
+Use these 6 categories when adding memories:
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `project-config` | Project setup, architecture, dependencies | "Using TypeScript 5.0 with Bun runtime" |
+| `architecture` | System design, patterns, conventions | "MVC pattern with service layer" |
+| `error-solution` | Bugs and fixes | "Fixed race condition with mutex" |
+| `preference` | Tool choices, workflows | "Prefer Prettier over ESLint format" |
+| `learned-pattern` | Solutions discovered | "Use .env files for secrets management" |
+| `conversation` | Session summaries, decisions | "Decided to move from REST to GraphQL" |
+
+## MCP Tools
+
+### 1. supermemory_add
+
+Save a memory for future recall.
+
+**Parameters:**
+- `content` (required): The memory text
+- `containerTag` (optional): Project-specific tag
+- `metadata` (optional): Additional context
+
+**Example:**
 ```
-Index this codebase into supermemory
+Use tool: supermemory_add
+content: "Decided to use PostgreSQL for transaction support"
+metadata: { type: "conversation" }
+```
+
+### 2. supermemory_search
+
+Search your coding history.
+
+**Parameters:**
+- `query` (required): Search query
+- `containerTag` (optional): Project scope
+- `limit` (optional): Max results (default: 10)
+
+**Example:**
+```
+Use tool: supermemory_search
+query: "authentication implementation"
+```
+
+### 3. supermemory_get_context
+
+Fetch profile and project context (auto-called on session start).
+
+**Parameters:**
+- `cwd` (optional): Working directory (auto-detected)
+- `projectName` (optional): Project name
+
+**Example:**
+```
+Use tool: supermemory_get_context
+cwd: "/path/to/project"
+projectName: "my-app"
+```
+
+### 4. supermemory_list
+
+List recent memories for a project.
+
+**Parameters:**
+- `containerTag` (optional): Project scope
+- `limit` (optional): Max memories (default: 20)
+
+**Example:**
+```
+Use tool: supermemory_list
+limit: 10
+```
+
+### 5. supermemory_forget
+
+Delete a specific memory.
+
+**Parameters:**
+- `memoryId` (required): ID of memory to delete
+
+**Example:**
+```
+Use tool: supermemory_forget
+memoryId: "123456"
+```
+
+### 6. supermemory_profile
+
+Get user profile facts and preferences.
+
+**Parameters:**
+- `query` (optional): Filter profile facts
+
+**Example:**
+```
+Use tool: supermemory_profile
+query: "editor"
 ```
 
 ## Environment Variables
@@ -109,20 +225,83 @@ Index this codebase into supermemory
 | `SUPERMEMORY_API_KEY` | Your Supermemory API key | Yes |
 | `SUPERMEMORY_DEBUG` | Enable debug logging | No |
 
+## Workflow
+
+### Session Start (Automatic)
+
+1. Generate user tag from `KIMI_EMAIL` (or `USER`)2. Generate project tag from git remote URL (or directory name)3. Fetch user profile with `supermemory_profile`4. Get project context with `supermemory_get_context`
+5. Inject `<supermemory-context>` with relevant memories
+
+### During Development (Agent-Driven)
+
+When you make decisions or solve problems, the agent should:
+
+```
+Use tool: supermemory_add
+content: "Decided to use PostgreSQL over MongoDB for transaction support"
+metadata: { type: "conversation" }
+```
+
+**Key Decision Points to Remember:**
+- Architecture choices and trade-offs
+- Performance optimizations
+- Bug solutions and root causes
+- Technology preferences and anti-patterns
+
+### Privacy Filter
+
+All outgoing content is stripped of `<private>` tags:
+
+```
+<private>secret_key_here</private>
+<private></private>
+```
+
+**Examples:**
+- ❌ `<private>API key is sk-12345</private>` → Rejects (fully private)
+- ✓ `<private>API key is sk-12345</private> Use env vars instead` → Saves (strips key)
+- ✓ `Use the .env file for secrets` → Saves (no private tags)
+
+## Logs
+
+Logs are written to `~/.kimi-supermemory.log`:
+
+```
+[2026-02-05T14:00:00.000Z] [INFO] Kimi Supermemory MCP server starting
+[2026-02-05T14:00:01.123Z] [INFO] Memory saved successfully (ID: abc123)
+[2026-02-05T14:00:02.456Z] [WARN] Config file not found, using defaults
+[2026-02-05T14:00:03.789Z] [ERROR] API request failed: Connection timeout
+```
+
+**Log Levels:**
+- INFO: Normal operations
+- WARN: Non-critical issues
+- ERROR: Failures with data loss risk
+- DEBUG: Verbose (only when `config.debug = true`)
+
 ## Project Structure
 
-Memories are organized by:
-- **Container Tag**: Derived from project directory path (e.g., `myproject_abc123`)
-- **Project Name**: Directory name
-- **Global Profile**: Cross-project user preferences
-
-## Troubleshooting
-
-**No memories showing up?**
-- Verify `SUPERMEMORY_API_KEY` is set correctly
-- Check that MCP server is running: `kimi mcp list`
-- Try indexing your codebase first
-
-**MCP server not connecting?**
-- Ensure the server is built: `npm run build` in mcp-server directory
-- Check kimi-cli can find the server: `kimi mcp list`
+```
+kimi-supermemory/
+├── mcp-server/
+│   ├── src/
+│   │   ├── server.js           # MCP server with 6 tools
+│   │   ├── lib/
+│   │   │   └── supermemory-client.js  # API client
+│   │   ├── services/
+│   │   │   ├── config.ts       # Configuration loader
+│   │   │   ├── logger.ts       # Structured logging
+│   │   │   ├── privacy.ts      # Privacy filtering
+│   │   │   └── tags.ts         # Hash-based scoping
+│   │   └── format-context.js   # Context formatting
+│   ├── dist/
+│   │   └── server.cjs          # Built server (CommonJS)
+│   └── test/
+│       ├── config.test.ts
+│       ├── logger.test.ts
+│       ├── privacy.test.ts
+│       └── tags.test.ts
+├── skill/
+│   └── SKILL.md                # This file
+└── install.sh                   # Installation script
+```
