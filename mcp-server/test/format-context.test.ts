@@ -2,35 +2,44 @@ import assert from "node:assert";
 
 describe("Context Format (OpenCode Style)", () => {
   
-  // Helper function simulating the new format
+  // Helper function matching OpenCode format
   function formatContextOpenCode(profile: any, userMemories: any, projectMemories: any): string | null {
     const parts: string[] = ["[SUPERMEMORY]"];
 
-    // User Profile section
+    // User Profile section (static facts)
     if (profile?.profile) {
       const { static: staticFacts, dynamic: dynamicFacts } = profile.profile;
-      const allFacts = [
-        ...(staticFacts || []),
-        ...(dynamicFacts || []),
-      ];
-
-      if (allFacts.length > 0) {
+      
+      if (staticFacts?.length > 0) {
         parts.push("\nUser Profile:");
-        for (const fact of allFacts.slice(0, 5)) {
-          if (fact.content || typeof fact === 'string') {
-            parts.push(`- ${fact.content || fact}`);
+        for (const fact of staticFacts.slice(0, 5)) {
+          const content = fact.content || fact;
+          if (content) {
+            parts.push(`- ${content}`);
+          }
+        }
+      }
+      
+      // Recent Context section (dynamic facts)
+      if (dynamicFacts?.length > 0) {
+        parts.push("\nRecent Context:");
+        for (const fact of dynamicFacts.slice(0, 5)) {
+          const content = fact.content || fact;
+          if (content) {
+            parts.push(`- ${content}`);
           }
         }
       }
     }
 
-    // Project Knowledge section (from listMemories - 100% similarity)
+    // Project Knowledge section (with actual similarity)
     const projectResults = projectMemories?.results || [];
     if (projectResults.length > 0) {
       parts.push("\nProject Knowledge:");
       for (const mem of projectResults) {
+        const similarity = Math.round((mem.similarity || 1) * 100);
         const content = mem.memory || mem.chunk || mem.content || "";
-        parts.push(`- [100%] ${content}`);
+        parts.push(`- [${similarity}%] ${content}`);
       }
     }
 
@@ -77,12 +86,12 @@ describe("Context Format (OpenCode Style)", () => {
   });
 
   describe("User Profile section", () => {
-    it("should include User Profile section with facts", () => {
+    it("should include User Profile section with static facts", () => {
       const context = formatContextOpenCode(
         { 
           profile: { 
             static: ["Prefers TypeScript", "Uses Vim"], 
-            dynamic: ["Working on auth"] 
+            dynamic: [] 
           } 
         },
         { results: [] },
@@ -92,7 +101,41 @@ describe("Context Format (OpenCode Style)", () => {
       assert.ok(context?.includes("User Profile:"), "Should have User Profile section");
       assert.ok(context?.includes("- Prefers TypeScript"), "Should list static facts");
       assert.ok(context?.includes("- Uses Vim"), "Should list all static facts");
+    });
+
+    it("should include Recent Context section with dynamic facts", () => {
+      const context = formatContextOpenCode(
+        { 
+          profile: { 
+            static: [], 
+            dynamic: ["Working on auth", "Learning Rust"] 
+          } 
+        },
+        { results: [] },
+        { results: [] }
+      );
+
+      assert.ok(context?.includes("Recent Context:"), "Should have Recent Context section");
       assert.ok(context?.includes("- Working on auth"), "Should list dynamic facts");
+      assert.ok(context?.includes("- Learning Rust"), "Should list all dynamic facts");
+    });
+
+    it("should have both User Profile and Recent Context sections", () => {
+      const context = formatContextOpenCode(
+        { 
+          profile: { 
+            static: ["Prefers TypeScript"], 
+            dynamic: ["Working on auth"] 
+          } 
+        },
+        { results: [] },
+        { results: [] }
+      );
+
+      assert.ok(context?.includes("User Profile:"), "Should have User Profile");
+      assert.ok(context?.includes("Recent Context:"), "Should have Recent Context");
+      assert.ok(context?.includes("- Prefers TypeScript"), "Should show static fact");
+      assert.ok(context?.includes("- Working on auth"), "Should show dynamic fact");
     });
 
     it("should handle profile with content property", () => {
@@ -110,7 +153,7 @@ describe("Context Format (OpenCode Style)", () => {
       assert.ok(context?.includes("- Fact with content prop"), "Should extract content property");
     });
 
-    it("should skip User Profile if no facts", () => {
+    it("should skip User Profile and Recent Context if no facts", () => {
       const context = formatContextOpenCode(
         { profile: { static: [], dynamic: [] } },
         { results: [{ memory: "Project memory", similarity: 1 }] },
@@ -118,25 +161,40 @@ describe("Context Format (OpenCode Style)", () => {
       );
 
       assert.ok(!context?.includes("User Profile:"), "Should skip empty profile section");
+      assert.ok(!context?.includes("Recent Context:"), "Should skip empty recent context section");
     });
   });
 
   describe("Project Knowledge section", () => {
-    it("should include Project Knowledge with [100%] scores", () => {
+    it("should include Project Knowledge with actual similarity scores", () => {
       const context = formatContextOpenCode(
         null,
         { results: [] },
         { 
           results: [
-            { memory: "Uses PostgreSQL" },
-            { memory: "JWT authentication" }
+            { memory: "Uses PostgreSQL", similarity: 0.95 },
+            { memory: "JWT authentication", similarity: 0.88 }
           ] 
         }
       );
 
       assert.ok(context?.includes("Project Knowledge:"), "Should have Project Knowledge section");
-      assert.ok(context?.includes("- [100%] Uses PostgreSQL"), "Should show 100% for project memories");
-      assert.ok(context?.includes("- [100%] JWT authentication"), "Should show 100% for all project memories");
+      assert.ok(context?.includes("- [95%] Uses PostgreSQL"), "Should show 95% similarity");
+      assert.ok(context?.includes("- [88%] JWT authentication"), "Should show 88% similarity");
+    });
+
+    it("should default to 100% when similarity not provided", () => {
+      const context = formatContextOpenCode(
+        null,
+        { results: [] },
+        { 
+          results: [
+            { memory: "Uses PostgreSQL" }  // no similarity field
+          ] 
+        }
+      );
+
+      assert.ok(context?.includes("- [100%] Uses PostgreSQL"), "Should default to 100% when no similarity");
     });
 
     it("should handle memory with chunk property", () => {
@@ -245,16 +303,18 @@ describe("Context Format (OpenCode Style)", () => {
         },
         { 
           results: [
-            { memory: "Project setup" }
+            { memory: "Project setup", similarity: 1.0 }
           ] 
         }
       );
 
       assert.ok(context?.startsWith("[SUPERMEMORY]"), "Should have header");
       assert.ok(context?.includes("User Profile:"), "Should have User Profile");
+      assert.ok(context?.includes("Recent Context:"), "Should have Recent Context");
       assert.ok(context?.includes("Project Knowledge:"), "Should have Project Knowledge");
       assert.ok(context?.includes("Relevant Memories:"), "Should have Relevant Memories");
-      assert.ok(context?.includes("- Expert in React"), "Should include profile facts");
+      assert.ok(context?.includes("- Expert in React"), "Should include static profile facts");
+      assert.ok(context?.includes("- Learning Rust"), "Should include dynamic profile facts");
       assert.ok(context?.includes("- [100%] Project setup"), "Should include project memories");
       assert.ok(context?.includes("- [85%] Similar pattern"), "Should include search results with scores");
     });
@@ -273,18 +333,20 @@ describe("Context Format (OpenCode Style)", () => {
   });
 
   describe("Section ordering", () => {
-    it("should order sections: User Profile, Project Knowledge, Relevant Memories", () => {
+    it("should order sections: User Profile, Recent Context, Project Knowledge, Relevant Memories", () => {
       const context = formatContextOpenCode(
-        { profile: { static: ["Fact"], dynamic: [] } },
+        { profile: { static: ["Static"], dynamic: ["Dynamic"] } },
         { results: [{ memory: "Search", similarity: 0.8 }] },
-        { results: [{ memory: "Project" }] }
+        { results: [{ memory: "Project", similarity: 1.0 }] }
       );
 
       const userProfileIndex = context?.indexOf("User Profile:") || -1;
+      const recentContextIndex = context?.indexOf("Recent Context:") || -1;
       const projectKnowledgeIndex = context?.indexOf("Project Knowledge:") || -1;
       const relevantMemoriesIndex = context?.indexOf("Relevant Memories:") || -1;
 
-      assert.ok(userProfileIndex < projectKnowledgeIndex, "User Profile should come before Project Knowledge");
+      assert.ok(userProfileIndex < recentContextIndex, "User Profile should come before Recent Context");
+      assert.ok(recentContextIndex < projectKnowledgeIndex, "Recent Context should come before Project Knowledge");
       assert.ok(projectKnowledgeIndex < relevantMemoriesIndex, "Project Knowledge should come before Relevant Memories");
     });
   });

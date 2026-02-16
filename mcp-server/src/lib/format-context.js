@@ -4,18 +4,26 @@ export function formatContext(profileResult, projectMemories = null, userMemorie
   const sections = [];
   const header = '[SUPERMEMORY]';
 
-  // Add User Profile section if we have profile data
+  // Add User Profile section (static facts)
   if (profileResult?.profile) {
     const { static: staticFacts, dynamic: dynamicFacts } = profileResult.profile;
-    const profileItems = [
-      ...(staticFacts || []),
-      ...(dynamicFacts || []),
-    ].slice(0, maxProfileItems);
-
-    if (profileItems.length > 0) {
+    
+    // User Profile: static facts
+    if (staticFacts?.length > 0) {
       sections.push('User Profile:');
-      for (const item of profileItems) {
-        const content = item.content || item;
+      for (const fact of staticFacts.slice(0, maxProfileItems)) {
+        const content = fact.content || fact;
+        if (content) {
+          sections.push(`- ${content}`);
+        }
+      }
+    }
+    
+    // Recent Context: dynamic facts
+    if (dynamicFacts?.length > 0) {
+      sections.push('Recent Context:');
+      for (const fact of dynamicFacts.slice(0, maxProfileItems)) {
+        const content = fact.content || fact;
         if (content) {
           sections.push(`- ${content}`);
         }
@@ -23,7 +31,7 @@ export function formatContext(profileResult, projectMemories = null, userMemorie
     }
   }
 
-  // Add Project Knowledge section (from listMemories - 100% similarity)
+  // Add Project Knowledge section (with actual similarity)
   if (projectMemories?.results?.length > 0) {
     const projectResults = projectMemories.results
       .filter((r) => r.memory || r.chunk || r.content)
@@ -32,9 +40,10 @@ export function formatContext(profileResult, projectMemories = null, userMemorie
     if (projectResults.length > 0) {
       sections.push('Project Knowledge:');
       for (const item of projectResults) {
+        const similarity = Math.round((item.similarity || 1) * 100);
         const memory = (item.memory || item.chunk || item.content || '').trim();
         if (memory) {
-          sections.push(`- [100%] ${memory}`);
+          sections.push(`- [${similarity}%] ${memory}`);
         }
       }
     }
