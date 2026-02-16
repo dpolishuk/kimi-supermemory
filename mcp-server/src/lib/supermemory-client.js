@@ -2,6 +2,16 @@ import Supermemory from 'supermemory';
 
 const DEFAULT_PROJECT_ID = 'kimi_default';
 const API_URL = process.env.SUPERMEMORY_API_URL || 'https://api.supermemory.ai';
+const TIMEOUT_MS = 30000;
+
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
+    ),
+  ]);
+}
 
 export class SupermemoryClient {
   constructor(apiKey, containerTag) {
@@ -30,7 +40,7 @@ export class SupermemoryClient {
       metadata: { sm_source: 'kimi-cli-plugin', ...metadata },
     };
     if (customId) payload.customId = customId;
-    const result = await this.client.add(payload);
+    const result = await withTimeout(this.client.add(payload), TIMEOUT_MS);
     return {
       id: result.id,
       status: result.status,
@@ -39,12 +49,15 @@ export class SupermemoryClient {
   }
 
   async search(query, containerTag, options = {}) {
-    const result = await this.client.search.memories({
-      q: query,
-      containerTag: containerTag || this.containerTag,
-      limit: options.limit || 10,
-      searchMode: options.searchMode || 'hybrid',
-    });
+    const result = await withTimeout(
+      this.client.search.memories({
+        q: query,
+        containerTag: containerTag || this.containerTag,
+        limit: options.limit || 10,
+        searchMode: options.searchMode || 'hybrid',
+      }),
+      TIMEOUT_MS
+    );
     return {
       results: result.results.map((r) => ({
         id: r.id,
@@ -59,10 +72,13 @@ export class SupermemoryClient {
   }
 
   async getProfile(containerTag, query) {
-    const result = await this.client.profile({
-      containerTag: containerTag || this.containerTag,
-      q: query,
-    });
+    const result = await withTimeout(
+      this.client.profile({
+        containerTag: containerTag || this.containerTag,
+        q: query,
+      }),
+      TIMEOUT_MS
+    );
     return {
       profile: {
         static: result.profile?.static || [],
@@ -84,12 +100,15 @@ export class SupermemoryClient {
   }
 
   async listMemories(containerTag, limit = 20) {
-    const result = await this.client.memories.list({
-      containerTags: containerTag || this.containerTag,
-      limit,
-      order: 'desc',
-      sort: 'createdAt',
-    });
+    const result = await withTimeout(
+      this.client.memories.list({
+        containerTags: [containerTag || this.containerTag],
+        limit,
+        order: 'desc',
+        sort: 'createdAt',
+      }),
+      TIMEOUT_MS
+    );
     return { memories: result.memories || result.results || [] };
   }
 

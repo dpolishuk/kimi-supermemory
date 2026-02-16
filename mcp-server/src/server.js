@@ -259,9 +259,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'supermemory_get_context': {
-        const cwd = args.cwd || process.cwd();
+        const cwd = args?.cwd || process.cwd() || '/';
         const tags = getTags(cwd);
-        const projectName = args.projectName || cwd.split('/').pop() || 'unknown';
+        const projectName = args?.projectName || cwd?.split('/').pop() || 'unknown';
 
         const profileResult = await client.getProfile(tags.project, projectName);
         const context = formatContext(profileResult, true, true, 5);
