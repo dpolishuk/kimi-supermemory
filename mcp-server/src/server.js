@@ -305,15 +305,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         const tags = getTags(cwd);
         const projectName = args?.projectName || cwd?.split('/').pop() || 'unknown';
 
-        const profileResult = await client.getProfile(tags.project, projectName);
-        const context = formatContext(profileResult, true, true, 5);
+        // Fetch all context data in parallel
+        const [profileResult, projectMemoriesResult, userMemoriesResult] = await Promise.all([
+          client.getProfile(tags.user, projectName),
+          client.listMemories(tags.project, 10),
+          client.search(projectName, tags.user, { limit: 5 }),
+        ]);
+
+        const context = formatContext(profileResult, projectMemoriesResult, userMemoriesResult, 5);
 
         if (!context) {
           return {
             content: [
               {
                 type: 'text',
-                text: '<supermemory-context>\nNo previous memories found for this project. Memories will be saved as you work.\n</supermemory-context>',
+                text: '[SUPERMEMORY]\n\nNo previous memories found for this project. Memories will be saved as you work.',
               },
             ],
           };
