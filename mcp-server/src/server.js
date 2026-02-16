@@ -155,6 +155,47 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
         },
       },
+      {
+        name: 'supermemory',
+        description: "Manage and query Supermemory persistent memory. Use 'add' to save memories, 'search' to find them, 'profile' to view your profile, 'list' to see recent memories, 'forget' to delete, or 'help' for usage guide. The 'scope' parameter controls whether memories are user-specific (cross-project) or project-specific.",
+        inputSchema: {
+          type: 'object',
+          properties: {
+            mode: {
+              type: 'string',
+              enum: ['add', 'search', 'profile', 'list', 'forget', 'help'],
+              description: 'Operation mode: add, search, profile, list, forget, or help',
+            },
+            content: {
+              type: 'string',
+              description: 'Memory content (required for add mode)',
+            },
+            query: {
+              type: 'string',
+              description: 'Search query (required for search mode, optional for profile)',
+            },
+            scope: {
+              type: 'string',
+              enum: ['user', 'project'],
+              description: 'Memory scope: user (cross-project) or project (default)',
+            },
+            type: {
+              type: 'string',
+              enum: ['project-config', 'architecture', 'error-solution', 'preference', 'learned-pattern', 'conversation'],
+              description: 'Memory type classification',
+            },
+            memoryId: {
+              type: 'string',
+              description: 'Memory ID (required for forget mode)',
+            },
+            limit: {
+              type: 'number',
+              description: 'Maximum results to return (for list/search modes)',
+            },
+          },
+          required: ['mode'],
+        },
+      },
     ],
   };
 });
@@ -371,6 +412,273 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'supermemory': {
+        // Unified tool with mode parameter
+        const mode = args.mode || 'help';
+        const scope = args.scope || 'project';
+        const cwd = args?.cwd || process.cwd() || '/';
+        const tags = getTags(cwd);
+        
+        // Select container tag based on scope
+        const containerTag = scope === 'user' ? tags.user : tags.project;
+
+        try {
+          switch (mode) {
+            case 'help': {
+              const helpText = `## Supermemory Usage Guide
+
+### Commands
+- **add** - Store a new memory
+  Args: content (required), type?, scope?
+  
+- **search** - Search memories
+  Args: query (required), scope?, limit?
+  
+- **profile** - View user profile
+  Args: query?
+  
+- **list** - List recent memories
+  Args: scope?, limit?
+  
+- **forget** - Remove a memory
+  Args: memoryId (required)
+
+### Scopes
+- **user** - Cross-project preferences and knowledge
+- **project** - Project-specific knowledge (default)
+
+### Memory Types
+- project-config, architecture, error-solution
+- preference, learned-pattern, conversation
+
+### Examples
+Add project memory: { mode: "add", content: "Uses TypeScript", type: "project-config" }
+Search all: { mode: "search", query: "authentication" }
+List user memories: { mode: "list", scope: "user" }`;
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: helpText,
+                }],
+              };
+            }
+
+            case 'add': {
+              if (!args.content) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                      success: false,
+                      error: 'content parameter is required for add mode'
+                    }),
+                  }],
+                  isError: true,
+                };
+              }
+
+              if (isFullyPrivate(args.content)) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                      success: false,
+                      error: 'Cannot store fully private content'
+                    }),
+                  }],
+                  isError: true,
+                };
+              }
+
+              const processedContent = stripPrivateContent(args.content);
+              const metadata = {
+                ...(args.type && { type: args.type }),
+                timestamp: new Date().toISOString(),
+              };
+
+              const result = await client.addMemory(processedContent, containerTag, metadata);
+              
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: true,
+                    message: `Memory added to ${scope} scope`,
+                    id: result.id,
+                    scope,
+                    type: args.type,
+                  }),
+                }],
+              };
+            }
+
+            case 'search': {
+              if (!args.query) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                      success: false,
+                      error: 'query parameter is required for search mode'
+                    }),
+                  }],
+                  isError: true,
+                };
+              }
+
+              // If scope specified, search only that scope
+              if (scope === 'user' || scope === 'project') {
+                const searchTag = scope === 'user' ? tags.user : tags.project;
+                const result = await client.search(args.query, searchTag, {
+                  limit: args.limit || 10,
+                });
+
+                const combined = (result.results || []).map(r => ({
+                  ...r,
+                  scope,
+                }));
+
+                return {
+                  content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                      success: true,
+                      query: args.query,
+                      scope,
+                      count: combined.length,
+                      results: combined.slice(0, args.limit || 10).map(r => ({
+                        id: r.id,
+                        content: r.memory || r.chunk,
+                        similarity: Math.round(r.similarity * 100),
+                        scope: r.scope,
+                      })),
+                    }),
+                  }],
+                };
+              }
+
+              // No scope specified - search both
+              const [userResult, projectResult] = await Promise.all([
+                client.search(args.query, tags.user, { limit: args.limit || 10 }),
+                client.search(args.query, tags.project, { limit: args.limit || 10 }),
+              ]);
+
+              const combined = [
+                ...(userResult.results || []).map(r => ({ ...r, scope: 'user' })),
+                ...(projectResult.results || []).map(r => ({ ...r, scope: 'project' })),
+              ].sort((a, b) => b.similarity - a.similarity);
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: true,
+                    query: args.query,
+                    count: combined.length,
+                    results: combined.slice(0, args.limit || 10).map(r => ({
+                      id: r.id,
+                      content: r.memory || r.chunk,
+                      similarity: Math.round(r.similarity * 100),
+                      scope: r.scope,
+                    })),
+                  }),
+                }],
+              };
+            }
+
+            case 'list': {
+              const result = await client.listMemories(containerTag, args.limit || 20);
+              const memories = result.memories || [];
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: true,
+                    scope,
+                    count: memories.length,
+                    memories: memories.map(m => ({
+                      id: m.id,
+                      content: m.summary || m.content,
+                      createdAt: m.createdAt,
+                      metadata: m.metadata,
+                    })),
+                  }),
+                }],
+              };
+            }
+
+            case 'forget': {
+              if (!args.memoryId) {
+                return {
+                  content: [{
+                    type: 'text',
+                    text: JSON.stringify({
+                      success: false,
+                      error: 'memoryId parameter is required for forget mode'
+                    }),
+                  }],
+                  isError: true,
+                };
+              }
+
+              await client.deleteMemory(args.memoryId);
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: true,
+                    message: `Memory ${args.memoryId} removed`,
+                  }),
+                }],
+              };
+            }
+
+            case 'profile': {
+              const result = await client.getProfile(tags.user, args.query);
+
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: true,
+                    profile: {
+                      static: result.profile?.static || [],
+                      dynamic: result.profile?.dynamic || [],
+                    },
+                  }),
+                }],
+              };
+            }
+
+            default:
+              return {
+                content: [{
+                  type: 'text',
+                  text: JSON.stringify({
+                    success: false,
+                    error: `Unknown mode: ${mode}`
+                  }),
+                }],
+                isError: true,
+              };
+          }
+        } catch (error) {
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: error.message,
+              }),
+            }],
+            isError: true,
+          };
+        }
       }
 
       default:
