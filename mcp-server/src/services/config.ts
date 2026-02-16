@@ -16,9 +16,13 @@ export interface SupermemoryConfig {
   keywordPatterns?: string[];
   debug?: boolean;
   allowPrivateContent?: boolean;
+  filterPrompt?: string;
+  shouldLLMFilter?: boolean;
 }
 
-const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey" | "apiUrl">> = {
+const DEFAULT_FILTER_PROMPT = "You are a stateful coding agent. Remember all information relevant to the user's coding preferences, tech stack, behaviors, workflows, and project context.";
+
+const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey" | "apiUrl" | "filterPrompt">> = {
   similarityThreshold: 0.6,
   maxMemories: 5,
   maxProjectMemories: 10,
@@ -28,6 +32,7 @@ const DEFAULTS: Required<Omit<SupermemoryConfig, "apiKey" | "apiUrl">> = {
   keywordPatterns: [],
   debug: false,
   allowPrivateContent: false,
+  shouldLLMFilter: true,
 };
 
 function getHomeConfigDir(): string {
@@ -70,6 +75,8 @@ export function loadConfig(): SupermemoryConfig {
   
   config.apiKey = process.env.SUPERMEMORY_API_KEY || config.apiKey;
   config.apiUrl = process.env.SUPERMEMORY_API_URL || config.apiUrl;
+  config.filterPrompt = config.filterPrompt || DEFAULT_FILTER_PROMPT;
+  config.shouldLLMFilter = config.shouldLLMFilter ?? DEFAULTS.shouldLLMFilter;
   
   return config;
 }

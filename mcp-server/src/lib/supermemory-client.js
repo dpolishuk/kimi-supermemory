@@ -1,4 +1,5 @@
 import Supermemory from 'supermemory';
+import { loadConfig } from '../services/config.js';
 
 const DEFAULT_PROJECT_ID = 'kimi_default';
 const API_URL = process.env.SUPERMEMORY_API_URL || 'https://api.supermemory.ai';
@@ -32,6 +33,20 @@ export class SupermemoryClient {
       baseURL: API_URL,
     });
     this.containerTag = tag;
+    
+    // Configure LLM filtering
+    const config = loadConfig();
+    if (config.shouldLLMFilter) {
+      try {
+        this.client.settings.update({
+          shouldLLMFilter: true,
+          filterPrompt: config.filterPrompt,
+        });
+      } catch (err) {
+        // LLM filtering is optional - continue if it fails
+        console.warn('Failed to configure LLM filtering:', err.message);
+      }
+    }
   }
 
   async addMemory(content, containerTag, metadata = {}, customId = null) {

@@ -132,7 +132,44 @@ Use these 6 categories when adding memories:
 
 ## MCP Tools
 
-### 1. supermemory_add
+### Unified Tool (Recommended)
+
+### 1. supermemory
+
+Manage and query Supermemory with a single tool using `mode` parameter.
+
+**Parameters:**
+- `mode` (required): "add", "search", "profile", "list", "forget", or "help"
+- `content` (for add): Memory text to save
+- `query` (for search/profile): Search query
+- `scope` (optional): "user" (cross-project) or "project" (default)
+- `type` (for add): Memory type classification
+- `memoryId` (for forget): ID of memory to delete
+- `limit` (for list/search): Max results
+
+**Examples:**
+```
+# Add a memory
+Use tool: supermemory
+mode: "add"
+content: "Uses TypeScript with strict mode"
+scope: "project"
+type: "project-config"
+
+# Search memories
+Use tool: supermemory
+mode: "search"
+query: "authentication"
+scope: "user"
+
+# Get help
+Use tool: supermemory
+mode: "help"
+```
+
+### Individual Tools (Legacy)
+
+### 2. supermemory_add
 
 Save a memory for future recall.
 
@@ -148,7 +185,7 @@ content: "Decided to use PostgreSQL for transaction support"
 metadata: { type: "conversation" }
 ```
 
-### 2. supermemory_search
+### 3. supermemory_search
 
 Search your coding history.
 
@@ -163,7 +200,7 @@ Use tool: supermemory_search
 query: "authentication implementation"
 ```
 
-### 3. supermemory_get_context
+### 4. supermemory_get_context
 
 Fetch profile and project context (auto-called on session start).
 
@@ -178,7 +215,7 @@ cwd: "/path/to/project"
 projectName: "my-app"
 ```
 
-### 4. supermemory_list
+### 5. supermemory_list
 
 List recent memories for a project.
 
@@ -192,7 +229,7 @@ Use tool: supermemory_list
 limit: 10
 ```
 
-### 5. supermemory_forget
+### 6. supermemory_forget
 
 Delete a specific memory.
 
@@ -205,7 +242,7 @@ Use tool: supermemory_forget
 memoryId: "123456"
 ```
 
-### 6. supermemory_profile
+### 7. supermemory_profile
 
 Get user profile facts and preferences.
 
@@ -229,8 +266,11 @@ query: "editor"
 
 ### Session Start (Automatic)
 
-1. Generate user tag from `KIMI_EMAIL` (or `USER`)2. Generate project tag from git remote URL (or directory name)3. Fetch user profile with `supermemory_profile`4. Get project context with `supermemory_get_context`
-5. Inject `<supermemory-context>` with relevant memories
+1. Generate user tag from `KIMI_EMAIL` (or `USER`)
+2. Generate project tag from git remote URL (or directory name)
+3. Fetch user profile with `supermemory_profile`
+4. Get project context with `supermemory_get_context`
+5. Inject `[SUPERMEMORY]` context with relevant memories
 
 ### During Development (Agent-Driven)
 
@@ -247,6 +287,61 @@ metadata: { type: "conversation" }
 - Performance optimizations
 - Bug solutions and root causes
 - Technology preferences and anti-patterns
+
+### Automatic Memory Capture
+
+The agent watches for keywords indicating the user wants something remembered.
+
+#### Trigger Keywords
+
+When the user says any of these, **automatically save to memory**:
+- "remember", "memorize", "save this"
+- "note this", "keep in mind"
+- "don't forget", "learn this"
+- "jot down", "make a note"
+- "take note", "commit to memory"
+- "remember that", "never forget"
+
+#### Memory Nudge
+
+When trigger keywords are detected, the agent should save the information:
+
+```
+[MEMORY TRIGGER DETECTED]
+The user wants you to remember something. 
+
+Use the unified supermemory tool:
+- mode: "add"
+- scope: "project" (for project-specific) or "user" (for cross-project preferences)
+- type: appropriate category (preference, project-config, etc.)
+```
+
+#### What to Remember
+
+| Type | Examples |
+|------|----------|
+| **preference** | "Always use TypeScript", "Prefer Bun over npm" |
+| **project-config** | "Node 18 required", "Uses pnpm workspaces" |
+| **architecture** | "MVC pattern", "Microservices approach" |
+| **error-solution** | "Fixed by clearing cache", "Race condition solved with mutex" |
+| **learned-pattern** | "Use dependency injection", "Abstract database layer" |
+| **conversation** | "Decided to migrate to v2", "Agreed on API design" |
+
+#### Using the Unified Tool
+
+For automatic captures, use the unified `supermemory` tool:
+
+```
+Use tool: supermemory
+mode: "add"
+content: "User prefers arrow functions over regular functions"
+scope: "user"
+type: "preference"
+```
+
+**Scope selection:**
+- `scope: "user"` - Cross-project preferences (coding style, tools)
+- `scope: "project"` - Project-specific knowledge (default)
 
 ### Privacy Filter
 
