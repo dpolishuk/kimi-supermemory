@@ -5,12 +5,13 @@ const API_URL = process.env.SUPERMEMORY_API_URL || 'https://api.supermemory.ai';
 const TIMEOUT_MS = 30000;
 
 function withTimeout(promise, ms) {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms)
-    ),
-  ]);
+  let timeoutId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`Timeout after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    clearTimeout(timeoutId);
+  });
 }
 
 export class SupermemoryClient {
@@ -100,6 +101,7 @@ export class SupermemoryClient {
   }
 
   async listMemories(containerTag, limit = 20) {
+    // API expects containerTags as array, not string (fix for 400 error)
     const result = await withTimeout(
       this.client.memories.list({
         containerTags: [containerTag || this.containerTag],
@@ -113,6 +115,6 @@ export class SupermemoryClient {
   }
 
   async deleteMemory(memoryId) {
-    return this.client.memories.delete(memoryId);
+    return withTimeout(this.client.memories.delete(memoryId), TIMEOUT_MS);
   }
 }

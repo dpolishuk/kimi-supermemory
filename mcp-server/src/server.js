@@ -176,7 +176,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   try {
-    const client = new SupermemoryClient(config.apiKey, config.apiUrl, args.containerTag);
+    const client = new SupermemoryClient(config.apiKey, args.containerTag);
 
     switch (name) {
       case 'supermemory_search': {
@@ -259,6 +259,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'supermemory_get_context': {
+        // Null-safe cwd handling: prevents crash when args.cwd is undefined
         const cwd = args?.cwd || process.cwd() || '/';
         const tags = getTags(cwd);
         const projectName = args?.projectName || cwd?.split('/').pop() || 'unknown';
